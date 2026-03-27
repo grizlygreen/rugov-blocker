@@ -70,7 +70,7 @@ if [[ -f "/var/log/rugov_blacklist/updater.sh" ]] || [[ -f "/etc/cron.daily/rugo
 fi
 
 # Зависимости
-for pkg in ipset iptables-persistent wget curl; do
+for pkg in ipset wget curl; do
     if ! command -v "${pkg%%-*}" &>/dev/null && ! dpkg -s "$pkg" &>/dev/null 2>&1; then
         warn "Установка $pkg..."
         apt-get install -y "$pkg" -qq
@@ -79,6 +79,22 @@ for pkg in ipset iptables-persistent wget curl; do
         ok "$pkg — есть"
     fi
 done
+
+# iptables-persistent — только если UFW не установлен (конфликт пакетов)
+if dpkg -s ufw &>/dev/null 2>&1; then
+    ok "UFW обнаружен — iptables-persistent пропускаем (совместимы)"
+    # Восстановление ipset при перезагрузке через @reboot cron
+    REBOOT_LINE="@reboot root ipset restore -! < /etc/iptables/ipset.rules 2>/dev/null || true"
+    grep -qF "ipset restore" /etc/cron.d/rugov-update 2>/dev/null || true
+else
+    if ! dpkg -s iptables-persistent &>/dev/null 2>&1; then
+        warn "Установка iptables-persistent..."
+        DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent -qq
+        ok "iptables-persistent установлен"
+    else
+        ok "iptables-persistent — есть"
+    fi
+fi
 
 echo
 
@@ -165,6 +181,8 @@ cat > /etc/cron.d/rugov-update << EOF
 0 4 * * * root . /etc/rugov/server.conf && /etc/rugov/rugov-update.sh
 # Отчёт о сканировании — ежедневно в 08:00
 0 8 * * * root . /etc/rugov/server.conf && /etc/rugov/rugov-report.sh
+# Восстановление ipset после перезагрузки
+@reboot root sleep 10 && ipset restore -! < /etc/iptables/ipset.rules 2>/dev/null && . /etc/rugov/server.conf && /etc/rugov/rugov-update.sh
 EOF
 chmod 644 /etc/cron.d/rugov-update
 ok "Cron настроен: обновление в 04:00, отчёт в 08:00"
