@@ -20,6 +20,55 @@ echo "  Установка блокировщика сетей РКН"
 echo "═══════════════════════════════════════"
 echo
 
+# Миграция со старого скрипта
+migrate_old() {
+    local OLD_DIR="/var/log/rugov_blacklist"
+    local OLD_CRON_DAILY="/etc/cron.daily/rugov_updater"
+    local OLD_CRON_D="/etc/cron.d/rugov_telegram_notifier"
+    local migrated=0
+
+    if [[ -f "$OLD_CRON_DAILY" ]]; then
+        rm -f "$OLD_CRON_DAILY"
+        ok "Удалён старый cron: $OLD_CRON_DAILY"
+        ((migrated++))
+    fi
+    if [[ -f "$OLD_CRON_D" ]]; then
+        rm -f "$OLD_CRON_D"
+        ok "Удалён старый cron: $OLD_CRON_D"
+        ((migrated++))
+    fi
+
+    # Telegram конфиг — перенести если есть
+    if [[ -f "$OLD_DIR/telegram.conf" && ! -f "$APP_DIR/telegram.conf" ]]; then
+        mkdir -p "$APP_DIR"
+        # Конвертируем старый формат (TELEGRAM_TOKEN) в новый (TG_TOKEN)
+        source "$OLD_DIR/telegram.conf"
+        cat > "$APP_DIR/telegram.conf" << EOF
+TG_TOKEN="${TELEGRAM_TOKEN:-}"
+TG_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+EOF
+        chmod 600 "$APP_DIR/telegram.conf"
+        ok "Telegram-конфиг перенесён из $OLD_DIR"
+        ((migrated++))
+    fi
+
+    if [[ -d "$OLD_DIR" ]]; then
+        rm -rf "$OLD_DIR"
+        ok "Удалена старая директория: $OLD_DIR"
+        ((migrated++))
+    fi
+
+    [[ $migrated -gt 0 ]] && warn "Миграция со старой версии выполнена"
+    return 0
+}
+
+if [[ -f "/var/log/rugov_blacklist/updater.sh" ]] || [[ -f "/etc/cron.daily/rugov_updater" ]]; then
+    echo
+    warn "Обнаружена старая версия скрипта — выполняю миграцию..."
+    migrate_old
+    echo
+fi
+
 # Зависимости
 for pkg in ipset iptables-persistent wget curl; do
     if ! command -v "${pkg%%-*}" &>/dev/null && ! dpkg -s "$pkg" &>/dev/null 2>&1; then
