@@ -82,11 +82,21 @@ done
 
 echo
 
-# Скопировать скрипт
+# Имя сервера для Telegram-сообщений
+echo
+read -rp "Имя сервера для уведомлений (Enter = $(hostname -s)): " srv_name
+srv_name="${srv_name:-$(hostname -s)}"
+
+# Скопировать скрипты
 mkdir -p "$APP_DIR"
 cp "$SCRIPT_DIR/rugov-update.sh" "$APP_DIR/rugov-update.sh"
-chmod +x "$APP_DIR/rugov-update.sh"
-ok "Скрипт установлен в $APP_DIR/rugov-update.sh"
+cp "$SCRIPT_DIR/rugov-report.sh" "$APP_DIR/rugov-report.sh"
+chmod +x "$APP_DIR/rugov-update.sh" "$APP_DIR/rugov-report.sh"
+
+# Сохранить имя сервера
+echo "RUGOV_SERVER_NAME=\"${srv_name}\"" > "$APP_DIR/server.conf"
+ok "Скрипты установлены в $APP_DIR/"
+ok "Имя сервера: ${srv_name}"
 
 # Telegram
 echo
@@ -118,11 +128,16 @@ else
     warn "Telegram пропущен — уведомлений не будет"
 fi
 
-# Cron — ежедневно в 04:00
+# Cron
 echo
-echo "0 4 * * * root $APP_DIR/rugov-update.sh" > /etc/cron.d/rugov-update
+cat > /etc/cron.d/rugov-update << EOF
+# Обновление списков РКН — ежедневно в 04:00
+0 4 * * * root . /etc/rugov/server.conf && /etc/rugov/rugov-update.sh
+# Отчёт о сканировании — ежедневно в 08:00
+0 8 * * * root . /etc/rugov/server.conf && /etc/rugov/rugov-report.sh
+EOF
 chmod 644 /etc/cron.d/rugov-update
-ok "Cron настроен: обновление каждый день в 04:00"
+ok "Cron настроен: обновление в 04:00, отчёт в 08:00"
 
 # Первый запуск
 echo

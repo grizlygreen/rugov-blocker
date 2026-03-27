@@ -6,6 +6,8 @@ set -euo pipefail
 
 # ── Конфигурация ────────────────────────────────────────────────────────────
 APP_DIR="/etc/rugov"
+[[ -f "$APP_DIR/server.conf" ]] && source "$APP_DIR/server.conf"
+SERVER_NAME="${RUGOV_SERVER_NAME:-$(hostname -s)}"
 BLACKLIST_URL="https://github.com/C24Be/AS_Network_List/raw/main/blacklists/blacklist.txt"
 SETNAME_V4="rugov_v4"
 SETNAME_V6="rugov_v6"
@@ -115,7 +117,7 @@ main() {
 
     log "Готово: IPv4=${count_v4}, IPv6=${count_v6}"
 
-    send_telegram "✅ <b>РКН блокировки обновлены</b>
+    send_telegram "✅ <b>РКН блокировки обновлены</b> [<code>${SERVER_NAME}</code>]
 📋 IPv4: <code>${count_v4}</code> сетей
 📋 IPv6: <code>${count_v6}</code> сетей
 🕐 $(date '+%d.%m.%Y %H:%M')"
