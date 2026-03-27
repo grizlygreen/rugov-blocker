@@ -82,10 +82,34 @@ done
 
 echo
 
-# Имя сервера для Telegram-сообщений
-echo
-read -rp "Имя сервера для уведомлений (Enter = $(hostname -s)): " srv_name
-srv_name="${srv_name:-$(hostname -s)}"
+# Загрузить существующий конфиг если есть (обновление)
+existing_srv=""
+existing_token=""
+existing_chat=""
+IS_UPDATE=false
+
+if [[ -f "$APP_DIR/server.conf" ]]; then
+    source "$APP_DIR/server.conf"
+    existing_srv="${RUGOV_SERVER_NAME:-}"
+    IS_UPDATE=true
+fi
+if [[ -f "$APP_DIR/telegram.conf" ]]; then
+    source "$APP_DIR/telegram.conf"
+    existing_token="${TG_TOKEN:-}"
+    existing_chat="${TG_CHAT_ID:-}"
+fi
+
+if $IS_UPDATE; then
+    warn "Обнаружена существующая установка — режим обновления"
+    echo "  Текущее имя сервера: ${existing_srv:-не задано}"
+    echo "  Telegram: ${existing_token:+настроен}"
+    echo
+fi
+
+# Имя сервера
+default_srv="${existing_srv:-$(hostname -s)}"
+read -rp "Имя сервера для уведомлений (Enter = ${default_srv}): " srv_name
+srv_name="${srv_name:-${default_srv}}"
 
 # Скопировать скрипты
 mkdir -p "$APP_DIR"
@@ -95,18 +119,25 @@ chmod +x "$APP_DIR/rugov-update.sh" "$APP_DIR/rugov-report.sh"
 
 # Сохранить имя сервера
 echo "RUGOV_SERVER_NAME=\"${srv_name}\"" > "$APP_DIR/server.conf"
-ok "Скрипты установлены в $APP_DIR/"
+ok "Скрипты обновлены в $APP_DIR/"
 ok "Имя сервера: ${srv_name}"
 
 # Telegram
 echo
 echo "Настройка Telegram-уведомлений"
-echo "(нужен бот — создай через @BotFather если нет)"
+if [[ -n "$existing_token" ]]; then
+    echo "(токен уже сохранён — Enter чтобы оставить без изменений)"
+else
+    echo "(нужен бот — создай через @BotFather если нет)"
+fi
 echo
-read -rp "Вставь Telegram Bot Token (или Enter чтобы пропустить): " tg_token
+read -rp "Telegram Bot Token (Enter = оставить): " tg_token
+tg_token="${tg_token:-${existing_token}}"
 
 if [[ -n "$tg_token" ]]; then
-    read -rp "Вставь Chat ID: " tg_chat_id
+    read -rp "Chat ID (Enter = оставить): " tg_chat_id
+    tg_chat_id="${tg_chat_id:-${existing_chat}}"
+
     cat > "$APP_DIR/telegram.conf" << EOF
 TG_TOKEN="${tg_token}"
 TG_CHAT_ID="${tg_chat_id}"
@@ -118,10 +149,9 @@ EOF
     read -rp "Отправить тестовое сообщение? (y/n) " -n 1 -r
     echo
     if [[ "$REPLY" =~ ^[Yy]$ ]]; then
-        source "$APP_DIR/telegram.conf"
-        curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${TG_CHAT_ID}" \
-            --data-urlencode "text=✅ Блокировщик РКН установлен и настроен" \
+        curl -s -X POST "https://api.telegram.org/bot${tg_token}/sendMessage" \
+            --data-urlencode "chat_id=${tg_chat_id}" \
+            --data-urlencode "text=✅ Блокировщик РКН ${IS_UPDATE:+обновлён}${IS_UPDATE:-установлен} на [${srv_name}]" \
             -o /dev/null && ok "Тестовое сообщение отправлено"
     fi
 else
